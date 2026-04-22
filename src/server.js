@@ -81,24 +81,31 @@ app.post('/api/upload', upload.single('excel'), async (req, res) => {
   }
 });
 
-// Upload Excel (fixed path issue)
+// Upload Excel
 app.post('/api/upload-excel', upload.single('excel'), async (req, res) => {
+  const tmpPath = req.file?.path;
   try {
-    if (!req.file) return res.status(400).json({ error: 'Chưa chọn file' });
+    if (!tmpPath) return res.status(400).json({ error: 'Chưa chọn file' });
 
-    const destPath = path.resolve('./input/data.xlsx');
-    fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    fs.copyFileSync(req.file.path, destPath);
+    // Đọc thẳng từ file temp — tránh bị lock khi file đang mở bằng Excel
+    const rows = await readInputExcel(tmpPath);
 
-    const rows = await readInputExcel(destPath);
-    fs.unlinkSync(req.file.path);
+    // Lưu lại để dùng lần sau (best-effort, không crash nếu file đang bị lock)
+    try {
+      const destPath = path.resolve('./input/data.xlsx');
+      fs.mkdirSync(path.dirname(destPath), { recursive: true });
+      fs.copyFileSync(tmpPath, destPath);
+    } catch (_) {}
 
     jobState.rows = rows;
     jobState.results = [];
     res.json({ rows });
   } catch (err) {
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
+  } finally {
+    if (tmpPath && fs.existsSync(tmpPath)) {
+      try { fs.unlinkSync(tmpPath); } catch (_) {}
+    }
   }
 });
 

@@ -4,3 +4,4 @@ cookies/
 output/
 input/data.xlsx
 *.log
+/input
