@@ -1,0 +1,23 @@
+{
+  "name": "convert-ai",
+  "version": "1.0.0",
+  "description": "Auto upload image + description to ChatGPT, download output named by Excel input",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "ui": "node src/server.js",
+    "login": "node src/login.js",
+    "create-sample": "node src/create-sample-excel.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.50.1",
+    "archiver": "^7.0.1",
+    "axios": "^1.7.2",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "puppeteer": "^22.10.0"
+  }
+}

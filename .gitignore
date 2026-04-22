@@ -1,0 +1,6 @@
+node_modules/
+.env
+cookies/
+output/
+input/data.xlsx
+*.log

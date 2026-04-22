@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Convert AI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3350;
+      --accent: #5c6ef8;
+      --accent-hover: #7a89ff;
+      --green: #34d399;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --gray: #6b7280;
+      --text: #e2e8f0;
+      --text-dim: #94a3b8;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 20px 32px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header .logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+    header .logo span { color: var(--accent); }
+    header .badge {
+      font-size: 11px; background: var(--surface2); border: 1px solid var(--border);
+      padding: 2px 8px; border-radius: 20px; color: var(--text-dim);
+    }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 20px;
+      padding: 24px 32px;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+
+    /* ── Left column ── */
+    .left { grid-column: 1; display: flex; flex-direction: column; gap: 16px; }
+
+    /* Upload zone */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: #1e2236; }
+    .upload-zone .icon { font-size: 36px; margin-bottom: 10px; }
+    .upload-zone p { color: var(--text-dim); font-size: 14px; }
+    .upload-zone p strong { color: var(--text); }
+    .upload-zone input { display: none; }
+
+    .file-info {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .file-info.show { display: flex; }
+    .file-info .fname { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-info .rows-badge {
+      background: var(--accent);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* Controls */
+    .controls { display: flex; gap: 10px; }
+    .btn {
+      flex: 1;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-danger { background: #ef444420; color: var(--red); border: 1px solid #ef444440; }
+    .btn-danger:hover:not(:disabled) { background: #ef444435; }
+    .btn-ghost {
+      background: var(--surface2); color: var(--text-dim);
+      border: 1px solid var(--border); flex: none; width: auto; padding: 10px 14px;
+    }
+    .btn-ghost:hover:not(:disabled) { color: var(--text); }
+
+    /* Stats bar */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .stat {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+    .stat .val { font-size: 20px; font-weight: 700; }
+    .stat .lbl { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .stat.green .val { color: var(--green); }
+    .stat.red .val { color: var(--red); }
+    .stat.yellow .val { color: var(--yellow); }
+
+    /* ── Right column ── */
+    .right { grid-column: 2; display: flex; flex-direction: column; gap: 16px; }
+
+    /* Table */
+    .table-wrap { overflow: auto; max-height: 340px; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      position: sticky; top: 0; background: var(--surface2);
+      padding: 10px 12px; text-align: left;
+      color: var(--text-dim); font-weight: 600; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .6px;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 9px 12px; }
+    td.td-name { font-weight: 500; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td.td-desc { color: var(--text-dim); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td.td-status { width: 100px; }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+    }
+    .status-pending  { background: #374151; color: var(--gray); }
+    .status-running  { background: #1e3a5f; color: #60a5fa; }
+    .status-success  { background: #064e3b; color: var(--green); }
+    .status-error    { background: #450a0a; color: var(--red); }
+    .status-skipped  { background: #1c1917; color: var(--yellow); }
+
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .dot.spin { animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+    /* Log */
+    .log-wrap {
+      background: #090b12;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      height: 220px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 12px;
+    }
+    .log-wrap::-webkit-scrollbar { width: 6px; }
+    .log-wrap::-webkit-scrollbar-track { background: transparent; }
+    .log-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .log-line { line-height: 1.7; display: flex; gap: 8px; }
+    .log-time { color: #3b4261; flex-shrink: 0; }
+    .log-line.info    .log-msg { color: #94a3b8; }
+    .log-line.success .log-msg { color: var(--green); }
+    .log-line.error   .log-msg { color: var(--red); }
+    .log-line.warn    .log-msg { color: var(--yellow); }
+    .log-line.progress .log-msg { color: #60a5fa; font-weight: 600; }
+    .log-line.done    .log-msg { color: #a78bfa; font-weight: 700; }
+    .log-line.skip    .log-msg { color: var(--yellow); }
+
+    /* Output files */
+    .output-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+    .output-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; background: var(--surface2);
+      border-radius: 8px; font-size: 13px;
+    }
+    .output-item .oname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .output-item a {
+      color: var(--accent); text-decoration: none; font-size: 12px; font-weight: 600;
+      padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border);
+    }
+    .output-item a:hover { background: var(--surface); }
+    .output-empty { color: var(--text-dim); font-size: 13px; text-align: center; padding: 20px; }
+
+    .bottom-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 32px;
+      border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--text-dim);
+    }
+    #connection-dot {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; background: var(--gray);
+      margin-right: 6px; vertical-align: middle;
+    }
+    #connection-dot.connected { background: var(--green); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Convert<span>AI</span></div>
+  <div class="badge">ChatGPT Automator</div>
+</header>
+
+<main>
+  <!-- Left column -->
+  <div class="left">
+    <!-- Upload -->
+    <div class="card">
+      <div class="card-title">1. Upload Excel</div>
+      <div class="upload-zone" id="dropZone">
+        <div class="icon">📊</div>
+        <p><strong>Kéo thả file .xlsx vào đây</strong></p>
+        <p style="margin-top:6px">hoặc click để chọn file</p>
+        <input type="file" id="fileInput" accept=".xlsx,.xls" />
+      </div>
+      <div class="file-info" id="fileInfo">
+        <span>📄</span>
+        <span class="fname" id="fileName">-</span>
+        <span class="rows-badge" id="rowCount">0 dòng</span>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card">
+      <div class="card-title">2. Điều khiển</div>
+      <div class="controls">
+        <button class="btn btn-primary" id="btnStart" disabled>▶ Bắt đầu</button>
+        <button class="btn btn-danger" id="btnStop" disabled>■ Dừng</button>
+        <button class="btn btn-ghost" id="btnRefresh" title="Làm mới file output">↺</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="card">
+      <div class="card-title">Tiến độ</div>
+      <div class="stats">
+        <div class="stat"><div class="val" id="statTotal">0</div><div class="lbl">Tổng</div></div>
+        <div class="stat green"><div class="val" id="statDone">0</div><div class="lbl">Xong</div></div>
+        <div class="stat red"><div class="val" id="statErr">0</div><div class="lbl">Lỗi</div></div>
+        <div class="stat yellow"><div class="val" id="statSkip">0</div><div class="lbl">Bỏ qua</div></div>
+      </div>
+    </div>
+
+    <!-- Download zip -->
+    <div class="card">
+      <div class="card-title">3. Tải kết quả</div>
+      <a class="btn btn-primary" style="display:block;text-align:center;text-decoration:none;padding:10px"
+         href="/api/download-zip" id="btnZip">⬇ Tải tất cả (ZIP)</a>
+    </div>
+  </div>
+
+  <!-- Right column -->
+  <div class="right">
+    <!-- Table -->
+    <div class="card" style="flex:0 0 auto">
+      <div class="card-title">Danh sách mẫu</div>
+      <div class="table-wrap">
+        <table id="rowTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Tên mẫu</th>
+              <th>AI Tool</th>
+              <th>Mô tả</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:24px">
+              Chưa có dữ liệu — hãy upload file Excel
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="card" style="flex:1">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Log thời gian thực</span>
+        <button onclick="clearLog()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px">Xóa</button>
+      </div>
+      <div class="log-wrap" id="logBox"></div>
+    </div>
+
+    <!-- Output files -->
+    <div class="card" style="flex:0 0 auto">
+      <div class="card-title">File đầu ra</div>
+      <div class="output-list" id="outputList">
+        <div class="output-empty">Chưa có file output</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="bottom-bar">
+  <span><span id="connection-dot"></span><span id="connectionLabel">Đang kết nối...</span></span>
+  <span>Convert AI — ChatGPT Automator</span>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let rows = [];
+let stats = { total: 0, done: 0, err: 0, skip: 0 };
+let running = false;
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+function connectSSE() {
+  const es = new EventSource('/api/events');
+  const dot = document.getElementById('connection-dot');
+  const lbl = document.getElementById('connectionLabel');
+
+  es.onopen = () => { dot.className = 'connected'; lbl.textContent = 'Đã kết nối'; };
+  es.onerror = () => { dot.className = ''; lbl.textContent = 'Mất kết nối — thử lại...'; setTimeout(connectSSE, 3000); es.close(); };
+
+  es.onmessage = ({ data }) => {
+    const msg = JSON.parse(data);
+    handleMessage(msg);
+  };
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'state':
+      running = msg.running;
+      if (msg.rows) setRows(msg.rows);
+      syncUI();
+      break;
+    case 'info':
+    case 'success':
+    case 'error':
+    case 'warn':
+    case 'progress':
+    case 'done':
+    case 'skip':
+    case 'stopped':
+      addLog(msg.type, msg.message);
+      if (msg.type === 'done' || msg.type === 'stopped') {
+        running = false; syncUI(); loadOutputFiles();
+      }
+      break;
+    case 'rowDone':
+      updateRowStatus(msg.index, msg.status);
+      if (msg.status === 'success') stats.done++;
+      else if (msg.status === 'error') stats.err++;
+      else if (msg.status === 'skipped') stats.skip++;
+      updateStats();
+      break;
+    case 'finished':
+      running = false; syncUI(); loadOutputFiles();
+      break;
+  }
+}
+
+// ── Upload ─────────────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) uploadFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) uploadFile(fileInput.files[0]); });
+
+async function uploadFile(file) {
+  addLog('info', `Đang đọc file: ${file.name}`);
+  const fd = new FormData();
+  fd.append('excel', file);
+
+  try {
+    const res = await fetch('/api/upload-excel', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('rowCount').textContent = `${data.rows.length} dòng`;
+    document.getElementById('fileInfo').classList.add('show');
+
+    setRows(data.rows);
+    addLog('success', `Đã đọc ${data.rows.length} dòng từ "${file.name}"`);
+    document.getElementById('btnStart').disabled = false;
+  } catch (err) {
+    addLog('error', `Lỗi đọc file: ${err.message}`);
+  }
+}
+
+// ── Rows ───────────────────────────────────────────────────────────────────────
+function setRows(data) {
+  rows = data;
+  stats = { total: rows.length, done: 0, err: 0, skip: 0 };
+  renderTable();
+  updateStats();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">Chưa có dữ liệu</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr id="row-${i}">
+      <td style="color:var(--text-dim)">${r.rowNumber || i + 1}</td>
+      <td class="td-name" title="${r.name}">${r.name}</td>
+      <td style="width:90px">${toolBadge(r.tool)}</td>
+      <td class="td-desc" title="${r.description}">${r.description}</td>
+      <td class="td-status"><span class="status-badge status-pending"><span class="dot"></span>Chờ</span></td>
+    </tr>
+  `).join('');
+}
+
+function updateRowStatus(index, status) {
+  const row = document.getElementById(`row-${index}`);
+  if (!row) return;
+  const cell = row.querySelector('.td-status');
+  const labels = { success: 'Xong', error: 'Lỗi', skipped: 'Bỏ qua', running: 'Đang xử lý' };
+  const spin = status === 'running' ? ' spin' : '';
+  cell.innerHTML = `<span class="status-badge status-${status}"><span class="dot${spin}"></span>${labels[status] || status}</span>`;
+  if (status === 'running') row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function updateStats() {
+  document.getElementById('statTotal').textContent = stats.total;
+  document.getElementById('statDone').textContent = stats.done;
+  document.getElementById('statErr').textContent = stats.err;
+  document.getElementById('statSkip').textContent = stats.skip;
+}
+
+// ── Controls ───────────────────────────────────────────────────────────────────
+document.getElementById('btnStart').addEventListener('click', async () => {
+  if (!rows.length) return;
+  stats = { total: rows.length, done: 0, err: 0, skip: 0 };
+  updateStats();
+  renderTable(); // reset status
+
+  const res = await fetch('/api/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  });
+  const data = await res.json();
+  if (!res.ok) { addLog('error', data.error); return; }
+
+  running = true;
+  syncUI();
+  addLog('progress', `Bắt đầu xử lý ${data.total} mẫu...`);
+});
+
+document.getElementById('btnStop').addEventListener('click', async () => {
+  await fetch('/api/stop', { method: 'POST' });
+  running = false; syncUI();
+});
+
+document.getElementById('btnRefresh').addEventListener('click', loadOutputFiles);
+
+function syncUI() {
+  document.getElementById('btnStart').disabled = running || !rows.length;
+  document.getElementById('btnStop').disabled = !running;
+}
+
+// ── Log ────────────────────────────────────────────────────────────────────────
+function addLog(type, message) {
+  const box = document.getElementById('logBox');
+  const now = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+  const line = document.createElement('div');
+  line.className = `log-line ${type}`;
+  line.innerHTML = `<span class="log-time">${now}</span><span class="log-msg">${escHtml(message)}</span>`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() { document.getElementById('logBox').innerHTML = ''; }
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Output files ───────────────────────────────────────────────────────────────
+async function loadOutputFiles() {
+  const res = await fetch('/api/outputs');
+  const files = await res.json();
+  const list = document.getElementById('outputList');
+
+  if (!files.length) {
+    list.innerHTML = '<div class="output-empty">Chưa có file output</div>';
+    return;
+  }
+
+  list.innerHTML = files.map(f => `
+    <div class="output-item">
+      <span>${fileIcon(f.name)}</span>
+      <span class="oname" title="${f.name}">${f.name}</span>
+      <span style="color:var(--text-dim);font-size:11px">${fmtSize(f.size)}</span>
+      <a href="${f.url}" download="${f.name}">Tải</a>
+    </div>
+  `).join('');
+}
+
+function toolBadge(tool) {
+  if (tool === 'gemini') return '<span style="background:#1a3a2a;color:#34d399;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">Gemini</span>';
+  return '<span style="background:#1e2a3a;color:#60a5fa;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">ChatGPT</span>';
+}
+
+function fileIcon(name) {
+  if (/\.(png|jpg|jpeg|webp|gif)$/i.test(name)) return '🖼️';
+  if (/\.txt$/i.test(name)) return '📄';
+  return '📁';
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + 'KB';
+  return (bytes / 1048576).toFixed(1) + 'MB';
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+connectSSE();
+loadOutputFiles();
+addLog('info', 'Giao diện sẵn sàng. Upload file Excel để bắt đầu.');
+</script>
+</body>
+</html>
