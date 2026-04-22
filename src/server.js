@@ -135,6 +135,33 @@ app.post('/api/stop', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Cookie management ─────────────────────────────────────────────────────────
+const COOKIE_FILES = {
+  chatgpt: path.resolve('./cookies/session.json'),
+  gemini:  path.resolve('./cookies/gemini-session.json'),
+};
+
+app.get('/api/cookies/:type', (req, res) => {
+  const file = COOKIE_FILES[req.params.type];
+  if (!file) return res.status(404).json({ error: 'Unknown type' });
+  if (!fs.existsSync(file)) return res.json({ cookies: '' });
+  res.json({ cookies: fs.readFileSync(file, 'utf8') });
+});
+
+app.post('/api/cookies/:type', express.json({ limit: '2mb' }), (req, res) => {
+  const file = COOKIE_FILES[req.params.type];
+  if (!file) return res.status(404).json({ error: 'Unknown type' });
+  try {
+    const raw = req.body.cookies || '';
+    JSON.parse(raw); // validate JSON
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, raw);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: 'JSON không hợp lệ: ' + err.message });
+  }
+});
+
 // Lấy danh sách file output của job hiện tại
 app.get('/api/outputs', (req, res) => {
   const runDir = jobState.runDir;

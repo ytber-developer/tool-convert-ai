@@ -238,6 +238,44 @@
       margin-right: 6px; vertical-align: middle;
     }
     #connection-dot.connected { background: var(--green); }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex; gap: 4px;
+      padding: 0 32px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      padding: 10px 18px; font-size: 13px; font-weight: 600;
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: var(--text-dim); cursor: pointer; margin-bottom: -1px;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: flex; flex: 1; }
+
+    /* ── Settings ── */
+    .settings-page {
+      padding: 24px 32px; max-width: 700px; width: 100%;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+    .cookie-block { display: flex; flex-direction: column; gap: 10px; }
+    .cookie-block label { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+    .cookie-block textarea {
+      width: 100%; height: 160px; padding: 12px;
+      background: #090b12; border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      resize: vertical; outline: none;
+    }
+    .cookie-block textarea:focus { border-color: var(--accent); }
+    .cookie-row { display: flex; align-items: center; gap: 10px; }
+    .cookie-status { font-size: 12px; }
+    .cookie-status.ok { color: var(--green); }
+    .cookie-status.err { color: var(--red); }
   </style>
 </head>
 <body>
@@ -247,6 +285,12 @@
   <div class="badge">ChatGPT Automator</div>
 </header>
 
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('main')">Chạy</button>
+  <button class="tab-btn" onclick="switchTab('settings')">Cài đặt</button>
+</div>
+
+<div id="tab-main" class="tab-content active" style="flex-direction:column">
 <main>
   <!-- Left column -->
   <div class="left">
@@ -338,6 +382,37 @@
     </div>
   </div>
 </main>
+
+</main>
+</div><!-- #tab-main -->
+
+<div id="tab-settings" class="tab-content">
+  <div class="settings-page">
+    <div class="card">
+      <div class="card-title">Cookie ChatGPT</div>
+      <div class="cookie-block">
+        <label>Dán JSON cookie từ Cookie-Editor (chatgpt.com)</label>
+        <textarea id="cookieChatgpt" placeholder='[{"name":"...","value":"..."}]'></textarea>
+        <div class="cookie-row">
+          <button class="btn btn-primary" style="flex:none;padding:8px 20px" onclick="saveCookies('chatgpt')">Lưu</button>
+          <span class="cookie-status" id="statusChatgpt"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Cookie Gemini</div>
+      <div class="cookie-block">
+        <label>Dán JSON cookie từ Cookie-Editor (gemini.google.com)</label>
+        <textarea id="cookieGemini" placeholder='[{"name":"...","value":"..."}]'></textarea>
+        <div class="cookie-row">
+          <button class="btn btn-primary" style="flex:none;padding:8px 20px" onclick="saveCookies('gemini')">Lưu</button>
+          <span class="cookie-status" id="statusGemini"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- #tab-settings -->
 
 <div class="bottom-bar">
   <span><span id="connection-dot"></span><span id="connectionLabel">Đang kết nối...</span></span>
@@ -561,6 +636,48 @@ function fmtSize(bytes) {
   if (bytes < 1024) return bytes + 'B';
   if (bytes < 1048576) return (bytes / 1024).toFixed(1) + 'KB';
   return (bytes / 1048576).toFixed(1) + 'MB';
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['main','settings'][i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(el => {
+    el.classList.toggle('active', el.id === 'tab-' + name);
+  });
+  if (name === 'settings') loadCookies();
+}
+
+// ── Cookies ────────────────────────────────────────────────────────────────────
+async function loadCookies() {
+  for (const type of ['chatgpt', 'gemini']) {
+    try {
+      const res = await fetch(`/api/cookies/${type}`);
+      const data = await res.json();
+      const ta = document.getElementById(type === 'chatgpt' ? 'cookieChatgpt' : 'cookieGemini');
+      if (data.cookies) ta.value = data.cookies;
+    } catch (_) {}
+  }
+}
+
+async function saveCookies(type) {
+  const ta = document.getElementById(type === 'chatgpt' ? 'cookieChatgpt' : 'cookieGemini');
+  const status = document.getElementById(type === 'chatgpt' ? 'statusChatgpt' : 'statusGemini');
+  status.textContent = 'Đang lưu...'; status.className = 'cookie-status';
+  try {
+    const res = await fetch(`/api/cookies/${type}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cookies: ta.value.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    status.textContent = '✓ Đã lưu'; status.className = 'cookie-status ok';
+  } catch (err) {
+    status.textContent = '✗ ' + err.message; status.className = 'cookie-status err';
+  }
+  setTimeout(() => { status.textContent = ''; }, 3000);
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────────
