@@ -33,7 +33,7 @@ function broadcast(data) {
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
-let jobState = { running: false, rows: [], results: [], currentFiles: [], runDir: null };
+let jobState = { running: false, rows: [], results: [], currentFiles: [], runDir: null, inputFile: null };
 
 function makeRunDir() {
   const now = new Date();
@@ -87,25 +87,22 @@ app.post('/api/upload-excel', upload.single('excel'), async (req, res) => {
   try {
     if (!tmpPath) return res.status(400).json({ error: 'Chưa chọn file' });
 
-    // Đọc thẳng từ file temp — tránh bị lock khi file đang mở bằng Excel
     const rows = await readInputExcel(tmpPath);
 
-    // Lưu lại để dùng lần sau (best-effort, không crash nếu file đang bị lock)
-    try {
-      const destPath = path.resolve('./input/data.xlsx');
-      fs.mkdirSync(path.dirname(destPath), { recursive: true });
-      fs.copyFileSync(tmpPath, destPath);
-    } catch (_) {}
+    // Xóa file upload trước nếu còn
+    if (jobState.inputFile && jobState.inputFile !== tmpPath && fs.existsSync(jobState.inputFile)) {
+      try { fs.unlinkSync(jobState.inputFile); } catch (_) {}
+    }
 
+    jobState.inputFile = tmpPath;
     jobState.rows = rows;
     jobState.results = [];
     res.json({ rows });
   } catch (err) {
-    res.status(400).json({ error: err.message });
-  } finally {
     if (tmpPath && fs.existsSync(tmpPath)) {
       try { fs.unlinkSync(tmpPath); } catch (_) {}
     }
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -276,6 +273,10 @@ async function runJob(rows, runDir) {
     jobState.running = false;
     for (const bot of allBots) {
       try { await bot.close(); } catch (_) {}
+    }
+    if (jobState.inputFile && fs.existsSync(jobState.inputFile)) {
+      try { fs.unlinkSync(jobState.inputFile); } catch (_) {}
+      jobState.inputFile = null;
     }
     broadcast({ type: 'finished', results: jobState.results });
   }
