@@ -66,8 +66,11 @@ class GeminiAutomator {
     if (fs.existsSync(COOKIES_FILE)) {
       const raw = JSON.parse(fs.readFileSync(COOKIES_FILE, 'utf8'));
       const cookies = raw.map(parseCookie);
-      await this.page.setCookie(...cookies);
-      console.log('  [Gemini Session] Đã load cookies');
+      // Dùng CDP để set cookie — không bị giới hạn bởi URL hiện tại
+      const client = await this.page.createCDPSession();
+      await client.send('Network.setCookies', { cookies });
+      await client.detach();
+      console.log(`  [Gemini Session] Đã load ${cookies.length} cookies`);
     }
   }
 
@@ -80,21 +83,27 @@ class GeminiAutomator {
 
   async ensureLoggedIn() {
     await this.page.goto(GEMINI_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+    console.log(`  [Gemini Auth] URL sau khi load: ${this.page.url()}`);
 
     // race: nếu rich-textarea xuất hiện → đã login; nếu timeout → chưa login
     const isLoggedIn = await this.page.waitForSelector('rich-textarea', { timeout: 15000 })
       .then(() => true)
       .catch(() => false);
 
+    console.log(`  [Gemini Auth] rich-textarea found: ${isLoggedIn}`);
+
     if (!isLoggedIn) {
-      console.log('\n  [Gemini Auth] Chưa đăng nhập. Vui lòng đăng nhập Google trong cửa sổ browser.');
-      console.log('  [Gemini Auth] Sau khi đăng nhập xong, nhấn Enter để tiếp tục...');
+      // Log thêm để debug xem đang ở trang nào
+      const pageTitle = await this.page.title();
+      console.log(`  [Gemini Auth] Page title: "${pageTitle}"`);
+      console.log('\n  [Gemini Auth] Chua dang nhap. Vui long dang nhap Google trong cua so browser.');
+      console.log('  [Gemini Auth] Sau khi dang nhap xong, nhan Enter de tiep tuc...');
       await new Promise(resolve => process.stdin.once('data', resolve));
       await this.page.waitForSelector('rich-textarea', { timeout: 60000 });
       await this.saveCookies();
     }
 
-    console.log('  [Gemini Auth] Đã đăng nhập thành công');
+    console.log('  [Gemini Auth] Da dang nhap thanh cong');
   }
 
   async newConversation() {
