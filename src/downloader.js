@@ -1,6 +1,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 /**
  * Download ảnh từ URL, lưu vào thư mục tạm để upload lên ChatGPT
@@ -14,7 +15,7 @@ const CONTENT_TYPE_EXT = {
   'image/avif': 'avif',
 };
 
-async function downloadImageToTemp(imageUrl, tempDir = '/tmp') {
+async function downloadImageToTemp(imageUrl, tempDir = os.tmpdir()) {
   const response = await axios.get(imageUrl, {
     responseType: 'arraybuffer',
     timeout: 30000,
