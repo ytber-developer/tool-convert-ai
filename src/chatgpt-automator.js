@@ -20,7 +20,7 @@ function parseCookie(c) {
   const exp = c.expirationDate || c.expires;
   if (exp && exp !== -1) cookie.expires = exp;
   // Chuẩn hóa sameSite
-  if (c.sameSite) {
+  if (c.sameSite && c.sameSite.toLowerCase() !== 'unspecified') {
     cookie.sameSite = SAME_SITE_MAP[c.sameSite.toLowerCase()] || c.sameSite;
   }
   return cookie;
