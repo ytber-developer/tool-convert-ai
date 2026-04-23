@@ -32,6 +32,7 @@ class ChatGPTAutomator {
     this.browser = null;
     this.page = null;
     this._ownsBrowser = false;
+    this._rateLimitWatcher = null;
   }
 
   async launch() {
@@ -63,19 +64,7 @@ class ChatGPTAutomator {
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
     );
 
-    // Tự động dismiss "Too many requests" popup trên mọi trang
-    await this.page.evaluateOnNewDocument(() => {
-      const dismiss = () => {
-        const hasTooMany = [...document.querySelectorAll('div, p')]
-          .some(el => el.textContent?.trim() === 'Too many requests');
-        if (!hasTooMany) return;
-        const btn = [...document.querySelectorAll('button')]
-          .find(b => b.textContent?.trim() === 'Got it');
-        if (btn) btn.click();
-      };
-      const observer = new MutationObserver(dismiss);
-      observer.observe(document.documentElement, { childList: true, subtree: true });
-    });
+    this._startRateLimitWatcher();
 
     if (fs.existsSync(COOKIES_FILE)) {
       const raw = JSON.parse(fs.readFileSync(COOKIES_FILE, 'utf8'));
@@ -120,26 +109,10 @@ class ChatGPTAutomator {
   async newConversation() {
     // Mở conversation mới để tránh context cũ ảnh hưởng
     await this.page.goto(CHATGPT_URL, { waitUntil: 'networkidle2', timeout: 30000 });
-    await this._dismissRateLimitIfNeeded();
     await this._waitForChatReady();
     await this._sleep(1500);
   }
 
-  async _dismissRateLimitIfNeeded() {
-    const hasDialog = await this.page.evaluate(() => {
-      const all = [...document.querySelectorAll('div, p')];
-      return all.some(el => el.textContent?.trim() === 'Too many requests');
-    });
-    if (!hasDialog) return false;
-
-    console.log('  [RateLimit] Phat hien "Too many requests" — click Got it...');
-    await this.page.evaluate(() => {
-      const btn = [...document.querySelectorAll('button')]
-        .find(b => b.textContent?.trim() === 'Got it');
-      if (btn) btn.click();
-    });
-    return true;
-  }
 
   /**
    * Gửi ảnh + prompt, đợi response, trả về URL ảnh output (nếu có) hoặc text
@@ -342,8 +315,6 @@ class ChatGPTAutomator {
         console.log(`  [Wait 2/2] Vẫn đang generate... (${Math.round((Date.now() - start) / 1000)}s)`);
       }
 
-      await this._dismissRateLimitIfNeeded();
-
       if (!isLoading) {
         await this._sleep(3000); // đợi thêm để ảnh render xong hoàn toàn
         console.log('  [Wait 2/2] Hoàn tất!');
@@ -530,6 +501,29 @@ class ChatGPTAutomator {
     return null;
   }
 
+  _startRateLimitWatcher() {
+    this._rateLimitWatcher = setInterval(async () => {
+      if (!this.page) return;
+      try {
+        await this.page.evaluate(() => {
+          const hasTooMany = [...document.querySelectorAll('div, p, h2')]
+            .some(el => el.textContent?.includes('Too many requests'));
+          if (!hasTooMany) return;
+          const btn = [...document.querySelectorAll('button')]
+            .find(b => b.textContent?.trim() === 'Got it');
+          if (btn) btn.click();
+        });
+      } catch (_) {}
+    }, 1500);
+  }
+
+  _stopRateLimitWatcher() {
+    if (this._rateLimitWatcher) {
+      clearInterval(this._rateLimitWatcher);
+      this._rateLimitWatcher = null;
+    }
+  }
+
   async _waitForChatReady() {
     await this.page.waitForSelector(
       '#prompt-textarea, div[contenteditable="true"], textarea[placeholder*="Message"]',
@@ -542,6 +536,7 @@ class ChatGPTAutomator {
   }
 
   async close() {
+    this._stopRateLimitWatcher();
     if (this.browser && this._ownsBrowser) {
       await this.browser.close();
       this.browser = null;
