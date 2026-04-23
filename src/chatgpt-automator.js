@@ -408,94 +408,67 @@ class ChatGPTAutomator {
     }
     await this._sleep(800);
 
-    // Lưu URL chat để reload khi retry
-    const chatUrl = this.page.url();
-    const MAX_RETRY = 3;
+    try {
+      await this.page.keyboard.press('Escape');
+      await this._sleep(500);
 
-    for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
-      console.log(`  [Download] Thu lan ${attempt}/${MAX_RETRY}...`);
-
-      if (attempt > 1) {
-        console.log(`  [Download] Reload chat de retry (lan ${attempt})...`);
-        await this.page.goto(chatUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-        await this._sleep(2000);
-        const reappeared = await this._waitForCondition(
-          () => this.page.evaluate(sel => !!document.querySelector(sel), OVERLAY_SEL),
-          30000
-        );
-        if (!reappeared) {
-          console.log(`  [Download] Khong thay overlay sau reload (lan ${attempt})`);
-          continue;
-        }
+      // Hover vào ảnh để overlay hiện
+      const imgEl = await this.page.$('img[src*="estuary/content"], img[id^="_r_"]');
+      if (imgEl) {
+        await imgEl.hover();
         await this._sleep(800);
       }
 
-      try {
-        // Đóng modal cũ nếu có
-        await this.page.keyboard.press('Escape');
-        await this._sleep(500);
+      // Click "Share this image"
+      const shareBtn = await this.page.$('button[aria-label="Share this image"]');
+      if (!shareBtn) throw new Error('Khong thay nut Share');
+      await shareBtn.click();
+      await this._sleep(1500);
 
-        // Hover vào ảnh để overlay hiện
-        const imgEl = await this.page.$('img[src*="estuary/content"], img[id^="_r_"]');
-        if (imgEl) {
-          await imgEl.hover();
-          await this._sleep(800);
-        }
+      // Chờ nút Download — tìm theo text bất kể class name
+      const dlAppeared = await this._waitForCondition(
+        () => this.page.evaluate(() =>
+          [...document.querySelectorAll('button')]
+            .some(b => [...b.querySelectorAll('div, span')]
+              .some(el => el.textContent?.trim() === 'Download'))
+        ),
+        10000
+      );
+      if (!dlAppeared) throw new Error('Modal khong co nut Download');
 
-        // Click "Share this image"
-        const shareBtn = await this.page.$('button[aria-label="Share this image"]');
-        if (!shareBtn) throw new Error('Khong thay nut Share');
-        await shareBtn.click();
-        await this._sleep(1500);
+      const clickedAt = Date.now();
+      await this.page.evaluate(() => {
+        const btn = [...document.querySelectorAll('button')]
+          .find(b => [...b.querySelectorAll('div, span')]
+            .some(el => el.textContent?.trim() === 'Download'));
+        btn?.click();
+      });
 
-        // Chờ nút Download trong modal — tìm theo text bất kể class name
-        const dlAppeared = await this._waitForCondition(
-          () => this.page.evaluate(() =>
-            [...document.querySelectorAll('button')]
-              .some(b => [...b.querySelectorAll('div, span')]
-                .some(el => el.textContent?.trim() === 'Download'))
-          ),
-          10000
-        );
-        if (!dlAppeared) throw new Error('Modal khong co nut Download');
-
-        const clickedAt = Date.now();
-        await this.page.evaluate(() => {
-          const btn = [...document.querySelectorAll('button')]
-            .find(b => [...b.querySelectorAll('div, span')]
-              .some(el => el.textContent?.trim() === 'Download'));
-          btn?.click();
-        });
-
-        // Poll cho đến khi file mới xuất hiện — tối đa 60s
-        const found = await this._waitForCondition(() => {
-          const files = fs.readdirSync(outputDir)
-            .filter(f => !f.endsWith('.txt') && !f.endsWith('.crdownload'))
-            .map(f => ({ name: f, time: fs.statSync(path.join(outputDir, f)).mtimeMs }))
-            .filter(f => f.time >= clickedAt - 1000);
-          return files.length > 0;
-        }, 60000);
-
-        if (!found) throw new Error('Khong thay file moi sau 60s');
-
+      // Poll cho đến khi file mới xuất hiện — tối đa 60s
+      const found = await this._waitForCondition(() => {
         const files = fs.readdirSync(outputDir)
           .filter(f => !f.endsWith('.txt') && !f.endsWith('.crdownload'))
           .map(f => ({ name: f, time: fs.statSync(path.join(outputDir, f)).mtimeMs }))
-          .filter(f => f.time >= clickedAt - 1000)
-          .sort((a, b) => b.time - a.time);
+          .filter(f => f.time >= clickedAt - 1000);
+        return files.length > 0;
+      }, 60000);
+      if (!found) throw new Error('Khong thay file moi sau 60s');
 
-        const latest = path.join(outputDir, files[0].name);
-        if (latest !== savePath) fs.renameSync(latest, savePath);
-        console.log(`  [Download] Da luu: ${savePath}`);
-        return savePath;
+      const files = fs.readdirSync(outputDir)
+        .filter(f => !f.endsWith('.txt') && !f.endsWith('.crdownload'))
+        .map(f => ({ name: f, time: fs.statSync(path.join(outputDir, f)).mtimeMs }))
+        .filter(f => f.time >= clickedAt - 1000)
+        .sort((a, b) => b.time - a.time);
 
-      } catch (err) {
-        console.log(`  [Download] Lan ${attempt} that bai: ${err.message}`);
-      }
+      const latest = path.join(outputDir, files[0].name);
+      if (latest !== savePath) fs.renameSync(latest, savePath);
+      console.log(`  [Download] Da luu: ${savePath}`);
+      return savePath;
+
+    } catch (err) {
+      console.log(`  [Download] That bai: ${err.message}`);
+      return null;
     }
-
-    console.log('  [Download] Het retry — khong download duoc anh');
-    return null;
   }
 
   _startRateLimitWatcher() {

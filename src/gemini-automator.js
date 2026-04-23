@@ -288,28 +288,9 @@ class GeminiAutomator {
     }
     await this._sleep(500);
 
-    // Lưu URL chat để reload khi retry
-    const chatUrl = this.page.url();
-    const MAX_DL_RETRY = 3;
-
-    for (let attempt = 1; attempt <= MAX_DL_RETRY; attempt++) {
-      if (attempt > 1) {
-        console.log(`  [Gemini] Reload chat de retry download (lan ${attempt})...`);
-        await this.page.goto(chatUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-        await this._sleep(2000);
-        const reappeared = await this._waitForCondition(
-          () => this.page.evaluate(s => !!document.querySelector(s), IMG_SEL),
-          30000
-        );
-        if (!reappeared) {
-          console.log(`  [Gemini] Khong thay anh sau reload (lan ${attempt})`);
-          continue;
-        }
-        await this._sleep(500);
-      }
-
+    try {
       // Bước 2: click vào image-button để mở popup overlay
-      console.log(`  [Gemini 2/4] Click anh de mo overlay (lan ${attempt})...`);
+      console.log('  [Gemini 2/4] Click anh de mo overlay...');
       await this.page.evaluate(s => {
         const imgs = document.querySelectorAll(s);
         const last = imgs[imgs.length - 1];
@@ -328,11 +309,7 @@ class GeminiAutomator {
         el.click();
         return true;
       }, DL_BTN);
-      if (!clicked) {
-        console.log(`  [Gemini] Khong thay nut download (lan ${attempt})`);
-        await this.page.keyboard.press('Escape');
-        continue;
-      }
+      if (!clicked) throw new Error('Khong thay nut download trong overlay');
 
       // Bước 4: chờ snackbar "Downloading full size..." xuất hiện rồi biến mất
       console.log('  [Gemini 4/4] Cho download hoan tat...');
@@ -343,11 +320,8 @@ class GeminiAutomator {
         }, SNACKBAR),
         10000
       );
-      if (!snackbarShown) {
-        console.log(`  [Gemini] Khong thay snackbar Downloading (lan ${attempt})`);
-        await this.page.keyboard.press('Escape');
-        continue;
-      }
+      if (!snackbarShown) throw new Error('Khong thay snackbar Downloading');
+
       await this._waitForCondition(
         () => this.page.evaluate(s => !document.querySelector(s), SNACKBAR),
         60000
@@ -361,17 +335,17 @@ class GeminiAutomator {
         .map(f => ({ name: f, mtime: fs.statSync(path.join(outputDir, f)).mtimeMs }))
         .sort((a, b) => b.mtime - a.mtime);
 
-      if (files.length > 0) {
-        const latest = path.join(outputDir, files[0].name);
-        if (latest !== savePath) fs.renameSync(latest, savePath);
-        console.log(`  [Gemini] Da luu: ${savePath}`);
-        return savePath;
-      }
+      if (files.length === 0) throw new Error('Khong tim thay file sau download');
 
-      console.log(`  [Gemini] Khong tim thay file sau download (lan ${attempt})`);
+      const latest = path.join(outputDir, files[0].name);
+      if (latest !== savePath) fs.renameSync(latest, savePath);
+      console.log(`  [Gemini] Da luu: ${savePath}`);
+      return savePath;
+
+    } catch (err) {
+      console.log(`  [Gemini] Download that bai: ${err.message}`);
+      return null;
     }
-
-    return null;
   }
 
   async _waitForChatReady() {
