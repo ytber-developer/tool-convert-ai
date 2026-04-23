@@ -8,7 +8,7 @@ const archiver = require('archiver');
 const { readInputExcel } = require('./excel-reader');
 const { ChatGPTAutomator } = require('./chatgpt-automator');
 const { GeminiAutomator } = require('./gemini-automator');
-const { downloadImageToTemp, saveOutputImage, sanitizeFilename } = require('./downloader');
+const { downloadImageToTemp, saveOutputImage } = require('./downloader');
 
 const puppeteer = require('puppeteer');
 
@@ -334,10 +334,7 @@ async function runJob(rows, runDir) {
         }
 
         if (!outputPath) {
-          const textPath = path.join(runDir, `${sanitizeFilename(row.name)}.txt`);
-          fs.writeFileSync(textPath, response.text || '');
-          outputPath = textPath;
-          log('warn', `  Không có ảnh, lưu text: ${path.basename(textPath)}`, { index: i });
+          throw new Error('Khong download duoc anh — se retry');
         }
 
         const fileName = path.basename(outputPath);

@@ -395,28 +395,38 @@ class ChatGPTAutomator {
       downloadPath: path.resolve(outputDir),
     });
 
-    // Bước 1: chờ overlay actions xuất hiện — tối đa 15 phút (chỉ chờ 1 lần)
-    const OVERLAY_SEL = '[data-testid="image-gen-overlay-right-actions"]';
+    // Bước 1: chờ ảnh xuất hiện trong message — tối đa 15 phút
+    const IMG_SELS = [
+      '[data-testid="image-gen-overlay-right-actions"]',
+      'img[src*="oaiusercontent"]',
+      'img[src*="estuary/content"]',
+      'img[id^="_r_"]',
+    ];
     console.log('  [Download] Cho anh generate xong (toi da 15 phut)...');
     const appeared = await this._waitForCondition(
-      () => this.page.evaluate(sel => !!document.querySelector(sel), OVERLAY_SEL),
+      () => this.page.evaluate(sels =>
+        sels.some(s => !!document.querySelector(s)), IMG_SELS),
       900000
     );
     if (!appeared) {
       console.log('  [Download] Timeout 15 phut — ChatGPT khong tra anh');
       return null;
     }
-    await this._sleep(800);
+    await this._sleep(1500);
 
     try {
       await this.page.keyboard.press('Escape');
       await this._sleep(500);
 
       // Hover vào ảnh để overlay hiện
-      const imgEl = await this.page.$('img[src*="estuary/content"], img[id^="_r_"]');
+      const imgEl = await this.page.$([
+        'img[src*="oaiusercontent"]',
+        'img[src*="estuary/content"]',
+        'img[id^="_r_"]',
+      ].join(', '));
       if (imgEl) {
         await imgEl.hover();
-        await this._sleep(800);
+        await this._sleep(1000);
       }
 
       // Click "Share this image"
