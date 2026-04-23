@@ -390,21 +390,25 @@ class ChatGPTAutomator {
     const safeName = sanitizeFilename(sampleName);
     const savePath = path.resolve(outputDir, `${safeName}.png`);
 
-    // Chờ img[src*="estuary/content"] xuất hiện trong assistant message — tối đa 15 phút
-    const IMG_SEL = 'img[src*="estuary/content"]';
-    console.log('  [Download] Cho anh generate xong (toi da 15 phut)...');
+    // Chờ ảnh generated (alt^="Generated image") load xong trong browser — tối đa 15 phút
+    const IMG_SEL = 'img[alt^="Generated image"]';
+    console.log('  [Download] Cho anh generate va render xong (toi da 15 phut)...');
     const appeared = await this._waitForCondition(
-      () => this.page.evaluate(s => !!document.querySelector(s), IMG_SEL),
+      () => this.page.evaluate(s => {
+        const imgs = [...document.querySelectorAll(s)];
+        const last = imgs[imgs.length - 1];
+        return last && last.complete && last.naturalWidth > 0;
+      }, IMG_SEL),
       900000
     );
     if (!appeared) {
       console.log('  [Download] Timeout 15 phut — ChatGPT khong tra anh');
       return null;
     }
-    await this._sleep(1000);
+    await this._sleep(500);
 
     try {
-      // Lấy src của ảnh cuối cùng trong assistant message
+      // Lấy src của ảnh generated cuối cùng
       const imgUrl = await this.page.evaluate(s => {
         const imgs = [...document.querySelectorAll(s)];
         const last = imgs[imgs.length - 1];
