@@ -406,10 +406,28 @@ class ChatGPTAutomator {
     }
     await this._sleep(800);
 
-    // Bước 2-4: retry tối đa 3 lần
+    // Lưu URL chat để reload khi retry
+    const chatUrl = this.page.url();
     const MAX_RETRY = 3;
+
     for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
       console.log(`  [Download] Thu lan ${attempt}/${MAX_RETRY}...`);
+
+      if (attempt > 1) {
+        console.log(`  [Download] Reload chat de retry (lan ${attempt})...`);
+        await this.page.goto(chatUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+        await this._sleep(2000);
+        const reappeared = await this._waitForCondition(
+          () => this.page.evaluate(sel => !!document.querySelector(sel), OVERLAY_SEL),
+          30000
+        );
+        if (!reappeared) {
+          console.log(`  [Download] Khong thay overlay sau reload (lan ${attempt})`);
+          continue;
+        }
+        await this._sleep(800);
+      }
+
       try {
         // Đóng modal cũ nếu có
         await this.page.keyboard.press('Escape');
@@ -474,7 +492,6 @@ class ChatGPTAutomator {
 
       } catch (err) {
         console.log(`  [Download] Lan ${attempt} that bai: ${err.message}`);
-        if (attempt < MAX_RETRY) await this._sleep(2000);
       }
     }
 
