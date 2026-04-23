@@ -120,13 +120,12 @@ class ChatGPTAutomator {
     });
     if (!hasDialog) return false;
 
-    console.log('  [RateLimit] Phat hien "Too many requests" — click Got it va doi 2 phut...');
+    console.log('  [RateLimit] Phat hien "Too many requests" — click Got it...');
     await this.page.evaluate(() => {
       const btn = [...document.querySelectorAll('button')]
         .find(b => b.textContent?.trim() === 'Got it');
       if (btn) btn.click();
     });
-    await this._sleep(120000);
     return true;
   }
 
