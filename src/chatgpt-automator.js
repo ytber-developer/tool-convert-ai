@@ -385,93 +385,51 @@ class ChatGPTAutomator {
    * Trả về đường dẫn file đã tải hoặc null
    */
   async downloadOutputImage(outputDir, sampleName) {
+    const axios = require('axios');
     const { sanitizeFilename } = require('./downloader');
     const safeName = sanitizeFilename(sampleName);
     const savePath = path.resolve(outputDir, `${safeName}.png`);
 
-    const client = await this.page.createCDPSession();
-    await client.send('Browser.setDownloadBehavior', {
-      behavior: 'allow',
-      downloadPath: path.resolve(outputDir),
-    });
-
-    // Bước 1: chờ ảnh xuất hiện trong message — tối đa 15 phút
-    const IMG_SELS = [
-      '[data-testid="image-gen-overlay-right-actions"]',
-      'img[src*="oaiusercontent"]',
-      'img[src*="estuary/content"]',
-      'img[id^="_r_"]',
-    ];
+    // Chờ img[src*="estuary/content"] xuất hiện trong assistant message — tối đa 15 phút
+    const IMG_SEL = 'img[src*="estuary/content"]';
     console.log('  [Download] Cho anh generate xong (toi da 15 phut)...');
     const appeared = await this._waitForCondition(
-      () => this.page.evaluate(sels =>
-        sels.some(s => !!document.querySelector(s)), IMG_SELS),
+      () => this.page.evaluate(s => !!document.querySelector(s), IMG_SEL),
       900000
     );
     if (!appeared) {
       console.log('  [Download] Timeout 15 phut — ChatGPT khong tra anh');
       return null;
     }
-    await this._sleep(1500);
+    await this._sleep(1000);
 
     try {
-      await this.page.keyboard.press('Escape');
-      await this._sleep(500);
+      // Lấy src của ảnh cuối cùng trong assistant message
+      const imgUrl = await this.page.evaluate(s => {
+        const imgs = [...document.querySelectorAll(s)];
+        const last = imgs[imgs.length - 1];
+        return last?.src || null;
+      }, IMG_SEL);
 
-      // Hover vào ảnh để overlay hiện
-      const imgEl = await this.page.$([
-        'img[src*="oaiusercontent"]',
-        'img[src*="estuary/content"]',
-        'img[id^="_r_"]',
-      ].join(', '));
-      if (imgEl) {
-        await imgEl.hover();
-        await this._sleep(1000);
-      }
+      if (!imgUrl) throw new Error('Khong lay duoc URL anh');
+      console.log(`  [Download] URL: ${imgUrl.substring(0, 100)}...`);
 
-      // Click "Share this image"
-      const shareBtn = await this.page.$('button[aria-label="Share this image"]');
-      if (!shareBtn) throw new Error('Khong thay nut Share');
-      await shareBtn.click();
-      await this._sleep(1500);
+      // Download bằng axios, truyền cookie của page để auth
+      const cookies = await this.page.cookies();
+      const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
 
-      // Chờ nút Download — tìm theo text bất kể class name
-      const dlAppeared = await this._waitForCondition(
-        () => this.page.evaluate(() =>
-          [...document.querySelectorAll('button')]
-            .some(b => [...b.querySelectorAll('div, span')]
-              .some(el => el.textContent?.trim() === 'Download'))
-        ),
-        10000
-      );
-      if (!dlAppeared) throw new Error('Modal khong co nut Download');
-
-      const clickedAt = Date.now();
-      await this.page.evaluate(() => {
-        const btn = [...document.querySelectorAll('button')]
-          .find(b => [...b.querySelectorAll('div, span')]
-            .some(el => el.textContent?.trim() === 'Download'));
-        btn?.click();
+      const response = await axios.get(imgUrl, {
+        responseType: 'arraybuffer',
+        timeout: 60000,
+        headers: {
+          Cookie: cookieHeader,
+          Referer: 'https://chatgpt.com/',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        },
       });
 
-      // Poll cho đến khi file mới xuất hiện — tối đa 60s
-      const found = await this._waitForCondition(() => {
-        const files = fs.readdirSync(outputDir)
-          .filter(f => !f.endsWith('.txt') && !f.endsWith('.crdownload'))
-          .map(f => ({ name: f, time: fs.statSync(path.join(outputDir, f)).mtimeMs }))
-          .filter(f => f.time >= clickedAt - 1000);
-        return files.length > 0;
-      }, 60000);
-      if (!found) throw new Error('Khong thay file moi sau 60s');
-
-      const files = fs.readdirSync(outputDir)
-        .filter(f => !f.endsWith('.txt') && !f.endsWith('.crdownload'))
-        .map(f => ({ name: f, time: fs.statSync(path.join(outputDir, f)).mtimeMs }))
-        .filter(f => f.time >= clickedAt - 1000)
-        .sort((a, b) => b.time - a.time);
-
-      const latest = path.join(outputDir, files[0].name);
-      if (latest !== savePath) fs.renameSync(latest, savePath);
+      fs.mkdirSync(outputDir, { recursive: true });
+      fs.writeFileSync(savePath, Buffer.from(response.data));
       console.log(`  [Download] Da luu: ${savePath}`);
       return savePath;
 
