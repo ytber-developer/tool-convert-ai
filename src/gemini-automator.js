@@ -288,58 +288,87 @@ class GeminiAutomator {
     }
     await this._sleep(500);
 
-    // Bước 2: click vào image-button để mở popup overlay
-    console.log('  [Gemini 2/4] Click anh de mo overlay...');
-    await this.page.evaluate(s => {
-      const imgs = document.querySelectorAll(s);
-      const last = imgs[imgs.length - 1];
-      if (last) {
-        const btn = last.closest('button.image-button');
-        (btn || last).click();
+    // Lưu URL chat để reload khi retry
+    const chatUrl = this.page.url();
+    const MAX_DL_RETRY = 3;
+
+    for (let attempt = 1; attempt <= MAX_DL_RETRY; attempt++) {
+      if (attempt > 1) {
+        console.log(`  [Gemini] Reload chat de retry download (lan ${attempt})...`);
+        await this.page.goto(chatUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+        await this._sleep(2000);
+        const reappeared = await this._waitForCondition(
+          () => this.page.evaluate(s => !!document.querySelector(s), IMG_SEL),
+          30000
+        );
+        if (!reappeared) {
+          console.log(`  [Gemini] Khong thay anh sau reload (lan ${attempt})`);
+          continue;
+        }
+        await this._sleep(500);
       }
-    }, IMG_SEL);
-    await this._sleep(1000);
 
-    // Bước 3: click nút download (đã visible trong overlay, không cần hover)
-    console.log('  [Gemini 3/4] Click download...');
-    const clicked = await this.page.evaluate(s => {
-      const el = document.querySelector(s);
-      if (!el) return false;
-      el.click();
-      return true;
-    }, DL_BTN);
-    if (!clicked) {
-      console.log('  [Gemini] Khong thay nut download trong overlay');
-      return null;
-    }
+      // Bước 2: click vào image-button để mở popup overlay
+      console.log(`  [Gemini 2/4] Click anh de mo overlay (lan ${attempt})...`);
+      await this.page.evaluate(s => {
+        const imgs = document.querySelectorAll(s);
+        const last = imgs[imgs.length - 1];
+        if (last) {
+          const btn = last.closest('button.image-button');
+          (btn || last).click();
+        }
+      }, IMG_SEL);
+      await this._sleep(1000);
 
-    // Bước 4: chờ snackbar "Downloading full size..." xuất hiện rồi biến mất
-    console.log('  [Gemini 4/4] Cho download hoan tat...');
-    await this._waitForCondition(
-      () => this.page.evaluate(s => {
+      // Bước 3: click nút download
+      console.log('  [Gemini 3/4] Click download...');
+      const clicked = await this.page.evaluate(s => {
         const el = document.querySelector(s);
-        return el && el.textContent.includes('Downloading');
-      }, SNACKBAR),
-      10000
-    );
-    await this._waitForCondition(
-      () => this.page.evaluate(s => !document.querySelector(s), SNACKBAR),
-      60000
-    );
-    await this._sleep(1000);
+        if (!el) return false;
+        el.click();
+        return true;
+      }, DL_BTN);
+      if (!clicked) {
+        console.log(`  [Gemini] Khong thay nut download (lan ${attempt})`);
+        await this.page.keyboard.press('Escape');
+        continue;
+      }
 
-    // Lấy file mới nhất trong outputDir
-    fs.mkdirSync(outputDir, { recursive: true });
-    const files = fs.readdirSync(outputDir)
-      .filter(f => !f.endsWith('.txt') && !f.endsWith('.crdownload'))
-      .map(f => ({ name: f, mtime: fs.statSync(path.join(outputDir, f)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime);
+      // Bước 4: chờ snackbar "Downloading full size..." xuất hiện rồi biến mất
+      console.log('  [Gemini 4/4] Cho download hoan tat...');
+      const snackbarShown = await this._waitForCondition(
+        () => this.page.evaluate(s => {
+          const el = document.querySelector(s);
+          return el && el.textContent.includes('Downloading');
+        }, SNACKBAR),
+        10000
+      );
+      if (!snackbarShown) {
+        console.log(`  [Gemini] Khong thay snackbar Downloading (lan ${attempt})`);
+        await this.page.keyboard.press('Escape');
+        continue;
+      }
+      await this._waitForCondition(
+        () => this.page.evaluate(s => !document.querySelector(s), SNACKBAR),
+        60000
+      );
+      await this._sleep(1000);
 
-    if (files.length > 0) {
-      const latest = path.join(outputDir, files[0].name);
-      if (latest !== savePath) fs.renameSync(latest, savePath);
-      console.log(`  [Gemini] Da luu: ${savePath}`);
-      return savePath;
+      // Lấy file mới nhất trong outputDir
+      fs.mkdirSync(outputDir, { recursive: true });
+      const files = fs.readdirSync(outputDir)
+        .filter(f => !f.endsWith('.txt') && !f.endsWith('.crdownload'))
+        .map(f => ({ name: f, mtime: fs.statSync(path.join(outputDir, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+
+      if (files.length > 0) {
+        const latest = path.join(outputDir, files[0].name);
+        if (latest !== savePath) fs.renameSync(latest, savePath);
+        console.log(`  [Gemini] Da luu: ${savePath}`);
+        return savePath;
+      }
+
+      console.log(`  [Gemini] Khong tim thay file sau download (lan ${attempt})`);
     }
 
     return null;
