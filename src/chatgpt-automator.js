@@ -448,26 +448,23 @@ class ChatGPTAutomator {
         await shareBtn.click();
         await this._sleep(1500);
 
-        // Chờ nút Download trong modal
+        // Chờ nút Download trong modal — tìm theo text bất kể class name
         const dlAppeared = await this._waitForCondition(
-          () => this.page.evaluate(() => {
-            for (const div of document.querySelectorAll('div.text-token-text-primary')) {
-              if (div.textContent?.trim() === 'Download') return true;
-            }
-            return false;
-          }),
+          () => this.page.evaluate(() =>
+            [...document.querySelectorAll('button')]
+              .some(b => [...b.querySelectorAll('div, span')]
+                .some(el => el.textContent?.trim() === 'Download'))
+          ),
           10000
         );
         if (!dlAppeared) throw new Error('Modal khong co nut Download');
 
         const clickedAt = Date.now();
         await this.page.evaluate(() => {
-          for (const div of document.querySelectorAll('div.text-token-text-primary')) {
-            if (div.textContent?.trim() === 'Download') {
-              div.closest('button')?.click();
-              return;
-            }
-          }
+          const btn = [...document.querySelectorAll('button')]
+            .find(b => [...b.querySelectorAll('div, span')]
+              .some(el => el.textContent?.trim() === 'Download'));
+          btn?.click();
         });
 
         // Poll cho đến khi file mới xuất hiện — tối đa 60s
