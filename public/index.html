@@ -176,11 +176,12 @@
       padding: 3px 9px; border-radius: 20px;
       font-size: 11px; font-weight: 600;
     }
-    .status-pending  { background: #374151; color: var(--gray); }
-    .status-running  { background: #1e3a5f; color: #60a5fa; }
-    .status-success  { background: #064e3b; color: var(--green); }
-    .status-error    { background: #450a0a; color: var(--red); }
-    .status-skipped  { background: #1c1917; color: var(--yellow); }
+    .status-pending   { background: #374151; color: var(--gray); }
+    .status-running   { background: #1e3a5f; color: #60a5fa; }
+    .status-success   { background: #064e3b; color: var(--green); }
+    .status-error     { background: #450a0a; color: var(--red); }
+    .status-skipped   { background: #1c1917; color: var(--yellow); }
+    .status-retrying  { background: #3b1f00; color: #fb923c; }
 
     .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .dot.spin { animation: pulse 1s infinite; }
@@ -465,6 +466,7 @@ function handleMessage(msg) {
       if (msg.status === 'success') stats.done++;
       else if (msg.status === 'error') stats.err++;
       else if (msg.status === 'skipped') stats.skip++;
+      else if (msg.status === 'retrying') stats.err = Math.max(0, stats.err - 1);
       updateStats();
       break;
     case 'finished':
@@ -538,7 +540,7 @@ function updateRowStatus(index, status) {
   const row = document.getElementById(`row-${index}`);
   if (!row) return;
   const cell = row.querySelector('.td-status');
-  const labels = { success: 'Xong', error: 'Lỗi', skipped: 'Bỏ qua', running: 'Đang xử lý' };
+  const labels = { success: 'Xong', error: 'Lỗi', skipped: 'Bỏ qua', running: 'Đang xử lý', retrying: 'Thử lại' };
   const spin = status === 'running' ? ' spin' : '';
   cell.innerHTML = `<span class="status-badge status-${status}"><span class="dot${spin}"></span>${labels[status] || status}</span>`;
   if (status === 'running') row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

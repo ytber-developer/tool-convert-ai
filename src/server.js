@@ -246,26 +246,52 @@ async function runJob(rows, runDir) {
 
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-    // Hàng đợi index cho từng tool
-    const queues = {};
-    for (const tool of tools) {
-      queues[tool] = rows.map((r, i) => i).filter(i => (rows[i].tool || 'chatgpt') === tool);
-    }
+    const buildQueues = (indices) => {
+      const q = {};
+      for (const tool of tools) q[tool] = indices.filter(i => (rows[i].tool || 'chatgpt') === tool);
+      return q;
+    };
 
-    // Chạy song song tất cả workers
-    const workerPromises = [];
-    for (const tool of tools) {
-      for (const bot of workerPools[tool]) {
-        workerPromises.push(runWorker(bot, tool, queues[tool], runDir));
+    const runAllWorkers = async (queues) => {
+      const promises = [];
+      for (const tool of tools) {
+        if (!queues[tool]?.length) continue;
+        for (const bot of workerPools[tool]) {
+          promises.push(runWorker(bot, tool, queues[tool], runDir));
+        }
       }
+      await Promise.all(promises);
+    };
+
+    // Lần chạy đầu
+    const allIndices = rows.map((_, i) => i);
+    await runAllWorkers(buildQueues(allIndices));
+
+    // Retry tối đa 3 lần cho các row bị lỗi
+    const MAX_RETRY_ROUNDS = 3;
+    for (let round = 1; round <= MAX_RETRY_ROUNDS; round++) {
+      if (!jobState.running) break;
+      const failedIndices = jobState.results
+        .map((r, i) => ({ r, i }))
+        .filter(({ r }) => r.status === 'error')
+        .map(({ i }) => i);
+      if (failedIndices.length === 0) break;
+
+      log('info', `Retry lần ${round}/${MAX_RETRY_ROUNDS}: ${failedIndices.length} row thất bại...`);
+      for (const i of failedIndices) {
+        jobState.results[i] = { ...rows[i], status: 'retrying' };
+        broadcast({ type: 'rowDone', index: i, status: 'retrying', name: rows[i].name });
+      }
+
+      await runAllWorkers(buildQueues(failedIndices));
     }
-    await Promise.all(workerPromises);
 
     for (const bot of allBots) {
       try { await bot.saveCookies(); } catch (_) {}
     }
 
-    log('done', `Hoàn tất! ${jobState.results.filter(r => r.status === 'success').length}/${rows.length} thành công`);
+    const successCount = jobState.results.filter(r => r.status === 'success').length;
+    log('done', `Hoàn tất! ${successCount}/${rows.length} thành công`);
 
   } catch (err) {
     log('error', `Lỗi nghiêm trọng: ${err.message}`);
