@@ -108,8 +108,26 @@ class ChatGPTAutomator {
   async newConversation() {
     // Mở conversation mới để tránh context cũ ảnh hưởng
     await this.page.goto(CHATGPT_URL, { waitUntil: 'networkidle2', timeout: 30000 });
+    await this._dismissRateLimitIfNeeded();
     await this._waitForChatReady();
     await this._sleep(1500);
+  }
+
+  async _dismissRateLimitIfNeeded() {
+    const hasDialog = await this.page.evaluate(() => {
+      const all = [...document.querySelectorAll('div, p')];
+      return all.some(el => el.textContent?.trim() === 'Too many requests');
+    });
+    if (!hasDialog) return false;
+
+    console.log('  [RateLimit] Phat hien "Too many requests" — click Got it va doi 2 phut...');
+    await this.page.evaluate(() => {
+      const btn = [...document.querySelectorAll('button')]
+        .find(b => b.textContent?.trim() === 'Got it');
+      if (btn) btn.click();
+    });
+    await this._sleep(120000);
+    return true;
   }
 
   /**
@@ -312,6 +330,8 @@ class ChatGPTAutomator {
       if (tick % 5 === 0) {
         console.log(`  [Wait 2/2] Vẫn đang generate... (${Math.round((Date.now() - start) / 1000)}s)`);
       }
+
+      await this._dismissRateLimitIfNeeded();
 
       if (!isLoading) {
         await this._sleep(3000); // đợi thêm để ảnh render xong hoàn toàn
