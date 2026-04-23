@@ -59,12 +59,24 @@ class ChatGPTAutomator {
   async _initPage() {
     this.page = await this.browser.newPage();
 
-    // Giả lập user agent thật để tránh bot detection
     await this.page.setUserAgent(
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
     );
 
-    // Load cookies nếu đã có session
+    // Tự động dismiss "Too many requests" popup trên mọi trang
+    await this.page.evaluateOnNewDocument(() => {
+      const dismiss = () => {
+        const hasTooMany = [...document.querySelectorAll('div, p')]
+          .some(el => el.textContent?.trim() === 'Too many requests');
+        if (!hasTooMany) return;
+        const btn = [...document.querySelectorAll('button')]
+          .find(b => b.textContent?.trim() === 'Got it');
+        if (btn) btn.click();
+      };
+      const observer = new MutationObserver(dismiss);
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    });
+
     if (fs.existsSync(COOKIES_FILE)) {
       const raw = JSON.parse(fs.readFileSync(COOKIES_FILE, 'utf8'));
       const cookies = raw.map(parseCookie);
